@@ -2,17 +2,20 @@
 
 Dipasang otomatis oleh render_facts.py (yang diimpor render.py) tanpa mengubah workflow.
 Aktif untuk baris dengan No >= "remotion_dari" di config.json. Baris lain tetap memakai render lama.
-Susunan: foto artis (artisDetik) -> 3 foto asli (artis kecil tanpa latar goyang di atasnya) -> foto artis lagi.
+Susunan (baris DENGAN kolom Gambar AI): foto artis (artisDetik) -> 3 foto asli (artis kecil tanpa latar goyang di atasnya) -> foto artis lagi.
+Susunan (baris TANPA Gambar AI): 1 gambar AI ACAK dari folder artis/ selama artisDetik (foto produk kecil goyang di atas
+subtitle) -> sisa durasi diisi 3 foto produk dibagi rata (tanpa layar hitam). Durasi video = panjang suara + 0,6 dtk.
+Folder artis/ kosong -> langsung 3 foto produk dibagi rata.
 Suara ElevenLabs & musik memakai bahan yang sama dengan render lama. Kalau Remotion gagal, pakai render lama
 dan baris dicoba lagi pada pengecekan berikutnya.
 """
-import hashlib, json, os, re, shutil, subprocess, sys
+import hashlib, json, os, random, re, shutil, subprocess, sys
 from pathlib import Path
 
 M = sys.modules["__main__"]          # render.py yang sedang berjalan
 ROOT = Path(__file__).parent
 REMO = ROOT / "remo"
-REMO_VER = "r3"
+REMO_VER = "r4"
 _asli_render, _asli_hash = M.render, M.input_hash
 
 
@@ -105,12 +108,16 @@ def remo_render(row):
         total = 0
     if total <= 0:
         total = a_dur + 0.6
+    tanpa_ai = not g(row, "img_ai")
+    if tanpa_ai:
+        total = a_dur + 0.6          # tanpa gambar AI sendiri: durasi video ikut lama suara
     total = max(5.0, min(total, 90.0))
     tempo = min(1.25, a_dur / (total - 0.3)) if a_dur > total - 0.3 else 1.0
 
     pub = REMO / "public" / f"p{no}"
     shutil.rmtree(pub, ignore_errors=True)
     pub.mkdir(parents=True)
+    pilih = None
     try:
         # suara (dipercepat bila perlu, dipotong sesuai durasi) & musik
         af = (f"atempo={tempo:.3f}," if tempo > 1.0 else "") + "apad"
@@ -132,19 +139,35 @@ def remo_render(row):
                 potong = f"p{no}/potong.png"
             except Exception as e:
                 print("Potong artis gagal (artis kecil dilewati):", str(e)[:200])
+        else:
+            pool = M.artis_pool()
+            if pool:
+                pilih = random.choice(pool)      # gambar AI acak, beda tiap render
+                ext = pilih.suffix.lower()
+                shutil.copy(pilih, pub / ("artis" + ext))
+                artis = f"p{no}/artis{ext}"
         urls = [g(row, "img_produk")] + [x.strip() for x in g(row, "foto_lain").split(",")]
         fotos = []
         for u in [x for x in urls if x][:3]:
-            p = M.fetch(u, ".jpg")
+            try:
+                p = M.fetch(u, ".jpg")
+            except Exception as e:
+                print("Foto gagal diunduh", no, "-", u[:60], "-", str(e)[:100])
+                continue
             nama = f"f{len(fotos) + 1}.jpg"
             shutil.copy(p, pub / nama)
             fotos.append(f"p{no}/{nama}")
-        # bagian foto produk selalu ~6 detik: 1 foto dipakai 2x (3 dtk, gerak kamera berbeda), 2 foto @3 dtk, 3 foto @2 dtk
+        artis_detik = float(M.CFG.get("foto_artis_detik", 5))
+        # baris dengan Gambar AI sendiri: bagian foto produk ~6 dtk (1 foto 2x, 2 foto @3 dtk, 3 foto @2 dtk)
+        # baris tanpa Gambar AI: foto produk membagi rata SELURUH sisa durasi setelah gambar AI acak
         foto_detik = float(M.CFG.get("foto_asli_detik", 2))
         if fotos:
             if len(fotos) == 1:
                 fotos = fotos * 2
-            foto_detik = 3 * float(M.CFG.get("foto_asli_detik", 2)) / len(fotos)
+            if tanpa_ai:
+                foto_detik = max(1.0, (total - (artis_detik if artis else 0)) / len(fotos))
+            else:
+                foto_detik = 3 * float(M.CFG.get("foto_asli_detik", 2)) / len(fotos)
         pendek = g(row, "pendek") or g(row, "nama")
         harga = re.sub(r"\D", "", g(row, "harga"))
         props = {
@@ -153,9 +176,13 @@ def remo_render(row):
             "harga": ("Rp" + f"{int(harga):,}".replace(",", ".")) if harga else "",
             "durasi": total, "artis": artis, "fotos": fotos,
             "audio": f"p{no}/suara.mp3", "musik": musik,
-            "artisDetik": float(M.CFG.get("foto_artis_detik", 5)), "fotoDetik": foto_detik,
+            "artisDetik": artis_detik, "fotoDetik": foto_detik,
             "kata": kata_waktu(g(row, "naskah"), a_dur / tempo, total),
         }
+        if tanpa_ai:
+            props["isiSisa"] = True
+            if artis and fotos:
+                props["produkKecil"] = fotos[0]
         tj = re.search(r"\d[\d.,]*\s*(?:RB|rb|JT|jt|K|k)?\+?", row.get("Terjual") or "")
         if tj:
             props["terjual"] = tj.group(0).strip().upper()
@@ -167,7 +194,10 @@ def remo_render(row):
         sh(["node", "render-remo.mjs", str(pj.resolve()), str(out.resolve())], cwd=REMO, timeout=1800)
     finally:
         shutil.rmtree(pub, ignore_errors=True)
-    return f"Selesai {M.duration(out):.0f} dtk (Remotion)" + (f" (suara dipercepat {tempo:.2f}x)" if tempo > 1.0 else "")
+    cat = f"Selesai {M.duration(out):.0f} dtk (Remotion)"
+    if tanpa_ai:
+        cat += f" ({len(set(fotos))} foto" + (f" + gambar AI {pilih.name}" if pilih else ", folder artis/ kosong") + ")"
+    return cat + (f" (suara dipercepat {tempo:.2f}x)" if tempo > 1.0 else "")
 
 
 def render(row):
