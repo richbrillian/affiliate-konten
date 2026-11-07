@@ -8,6 +8,8 @@ export type Props = {
   artisDetik: number; fotoDetik: number; kata: Kata[];
   terjual?: string; // mis. "378RB+"
   artisPotong?: string; // PNG artis tanpa latar (kecil, goyang di atas foto produk)
+  produkKecil?: string; // foto produk kecil yang goyang di atas subtitle selama gambar artis tampil
+  isiSisa?: boolean; // true = sisa durasi diisi foto produk (foto terakhir menyambung sampai akhir), bukan artis lagi
 };
 const src = (s: string) => (s.startsWith('http') ? s : staticFile(s));
 
@@ -112,11 +114,29 @@ const ArtisKecil: React.FC<{u: string}> = ({u}) => {
   );
 };
 
+// Foto produk kecil (150 px) goyang pelan di tengah, TEPAT DI ATAS subtitle (subtitle mulai ±y=1448,
+// foto menempati ±y=1235..1425) dan jauh di atas kotak KODE (±y=1645).
+const ProdukKecil: React.FC<{u: string}> = ({u}) => {
+  const f = useCurrentFrame(); const {fps} = useVideoConfig();
+  const masuk = spring({frame: f, fps, config: {damping: 10, stiffness: 120}});
+  const miring = Math.sin(f / 7) * 4.5;
+  const geserX = Math.sin(f / 11) * 10;
+  const geserY = Math.sin(f / 9 + 1) * 7;
+  return (
+    <div style={{position: 'absolute', left: 0, right: 0, top: 1245, height: 170, display: 'flex', justifyContent: 'center', alignItems: 'center'}}>
+      <div style={{transform: `translate(${geserX}px, ${geserY}px) rotate(${miring}deg) scale(${masuk})`, background: '#fff', padding: 6, borderRadius: 14, boxShadow: '0 8px 18px rgba(0,0,0,.45)'}}>
+        <Img src={src(u)} style={{width: 150, height: 150, objectFit: 'cover', borderRadius: 10, display: 'block'}} />
+      </div>
+    </div>
+  );
+};
+
 export const Iklan: React.FC<Props> = (p) => {
   const {fps} = useVideoConfig();
   const akhir = Math.round(p.durasi * fps);
   // Susunan: foto artis (artisDetik) -> maks 3 foto asli (fotoDetik tiap foto, artis kecil goyang di atasnya)
-  // -> sisa waktu foto artis lagi.
+  // -> sisa waktu foto artis lagi. Kalau isiSisa: sisa waktu diisi foto produk (foto terakhir menyambung
+  // sampai akhir) dan tidak ada artis lagi -> tidak ada layar hitam.
   const bagian: {u: string; dur: number; i: number; kecil: boolean}[] = [];
   let kecilMulai = -1, kecilDur = 0;
   let sisa = akhir, i = 0;
@@ -128,8 +148,10 @@ export const Iklan: React.FC<Props> = (p) => {
     }
   };
   tambah(p.artis, p.artisDetik, false);
-  p.fotos.slice(0, 3).forEach((u) => tambah(u, p.fotoDetik, !!p.artisPotong));
-  if (sisa > 0) tambah(p.artis, sisa / fps, false);
+  const ff = p.fotos.slice(0, 3);
+  ff.forEach((u, n) => tambah(u, p.isiSisa && n === ff.length - 1 ? sisa / fps : p.fotoDetik, !!p.artisPotong));
+  if (sisa > 0 && !p.isiSisa) tambah(p.artis, sisa / fps, false);
+  const produkDur = p.artis ? Math.min(akhir, Math.round(p.artisDetik * fps)) : 0;
   let mulai = 0;
   return (
     <AbsoluteFill style={{backgroundColor: '#000'}}>
@@ -138,6 +160,7 @@ export const Iklan: React.FC<Props> = (p) => {
           <Foto u={s.u} dur={s.dur} i={s.i} />
         </Sequence>); })}
       {p.artisPotong && kecilDur > 0 ? <Sequence from={kecilMulai} durationInFrames={kecilDur}><ArtisKecil u={p.artisPotong} /></Sequence> : null}
+      {p.produkKecil && produkDur > 0 ? <Sequence from={0} durationInFrames={produkDur}><ProdukKecil u={p.produkKecil} /></Sequence> : null}
       <Judul judul={p.judul} harga={p.harga} />
       {p.terjual ? <Terjual t={p.terjual} /> : null}
       <Subtitle kata={p.kata} />
