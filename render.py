@@ -11,11 +11,14 @@ Baris yang bahannya tidak berubah tidak dirender ulang (hemat waktu & kredit Ele
 Urutan video: Video AI -> Video saya -> foto (gambar AI, foto produk, foto lain) bergantian
 dengan gerak zoom, sampai durasi terpenuhi. Kalau tidak ada video sama sekali, langsung foto.
 
-MODE FOTO SAJA (tanpa gambar AI, tanpa video AI, tanpa video sendiri): pakai sampai 3 foto Shopee
-(kolom URL foto produk + Foto produk lain), durasi video = panjang suara + 0,6 dtk, dan tiap foto
-tampil sama lama (foto terakhir menyambung sampai akhir) -> tidak ada layar hitam.
+MODE FOTO SAJA (tanpa gambar AI, tanpa video AI, tanpa video sendiri):
+  - Durasi video = panjang suara + 0,6 dtk (kolom Durasi diabaikan) -> tidak ada layar hitam.
+  - 5 dtk pertama: satu gambar AI dipilih ACAK dari folder artis/ (jpg/png/webp), bergerak goyang,
+    dengan foto produk kecil ikut goyang di atas caption bawah (tidak menutupi subtitle & kotak "Kode").
+  - Sisanya: sampai 3 foto Shopee (URL foto produk + Foto produk lain), dibagi rata sampai akhir.
+  - Folder artis/ kosong/tidak ada -> hanya 3 foto Shopee (tanpa gambar AI).
 """
-import csv, hashlib, io, json, os, re, subprocess, sys, urllib.error, urllib.request
+import csv, hashlib, io, json, os, random, re, subprocess, sys, urllib.error, urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -28,6 +31,7 @@ def _cfg():
     except Exception: return {}
 CFG = _cfg()
 ARTIS_DETIK = float(CFG.get("foto_artis_detik", ARTIS_DETIK))
+FOTO_AI_DETIK = float(CFG.get("foto_ai_detik", 5.0))   # mode foto saja: lama gambar AI acak di awal
 # eleven_v4 = suara natural (ada nada ceria/tenang per kalimat); eleven_multilingual_v2 = suara lama, lebih hemat kredit
 TTS_MODEL_DEFAULT = CFG.get("tts_model", "eleven_multilingual_v2")
 HOOKS = ["STOP SCROLL DULU!", "WAJIB TAHU INI!", "MURAH BANGET, SERIUS!", "JANGAN SAMPAI KETINGGALAN!"]
@@ -35,6 +39,11 @@ ROOT = Path(__file__).parent
 OUT = ROOT / "output"; CACHE = ROOT / ".cache"
 OUT.mkdir(exist_ok=True); CACHE.mkdir(exist_ok=True)
 HASIL = OUT / "hasil.csv"
+ARTIS_DIR = ROOT / "artis"   # taruh 10 gambar AI di sini (jpg/png/webp); dipilih acak tiap render
+def artis_pool():
+    try: return sorted(p for p in ARTIS_DIR.iterdir() if p.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp"))
+    except Exception: return []
+THUMB_Y = 1462    # titik tengah foto produk kecil: di antara subtitle (bawah ±1360) dan kotak "Kode" (atas ±1564)
 FONT = os.getenv("FONT", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
 VOICE_ID = os.getenv("VOICE_ID") or "W98P5TTtcHAH6zHkf7ul"  # Raya Fie (ID)
 COL = {
@@ -95,7 +104,7 @@ def tts(text):
     return p
 
 EDIT_VER = "e2"           # versi gaya edit (hook, subtitle, kartu penutup)
-FOTO_VER = "f3"           # versi mode foto saja (3 foto Shopee, durasi ikut suara)
+FOTO_VER = "f4"           # versi mode foto saja (gambar AI acak 5 dtk + foto produk goyang + foto Shopee)
 MUSIK_VER = "m1"          # ganti angkanya kalau gaya musik diubah -> video dirender ulang
 MUSIK_ON = os.getenv("MUSIK", "1" if CFG.get("musik", True) else "0") != "0"   # variabel Actions MUSIK=0 -> tanpa musik
 
@@ -166,6 +175,17 @@ def clip_from_video(vid, secs, out):
     run(["ffmpeg", "-y", "-i", str(vid), "-t", f"{secs:.2f}", "-vf", vf, "-an",
          "-pix_fmt", "yuv420p", "-c:v", "libx264", "-preset", "veryfast", str(out)])
 
+def tempel_produk_goyang(src_video, foto, secs_tampil, total, out):
+    """Foto produk kecil (tinggi 140 px) bergoyang pelan (miring ±4,5° + geser sedikit) selama secs_tampil detik,
+    ditempel di tengah-bawah tepat di atas kotak 'Kode' dan di bawah subtitle (tidak menutupi keduanya)."""
+    fc = ("[1:v]scale=-2:140,format=rgba,pad=iw+8:ih+8:4:4:color=white,"
+          "rotate=a='0.08*sin(2*PI*t*1.3)':c=none:ow='ceil(hypot(iw,ih)/2)*2':oh='ceil(hypot(iw,ih)/2)*2'[t];"
+          f"[0:v][t]overlay=x='(W-w)/2+10*sin(2*PI*t*1.7)':y='{THUMB_Y}-h/2+6*sin(2*PI*t*2.3)':"
+          f"enable='lte(t,{secs_tampil:.2f})':shortest=1,format=yuv420p[v]")
+    run(["ffmpeg", "-y", "-i", str(src_video), "-loop", "1", "-i", str(foto), "-filter_complex", fc,
+         "-map", "[v]", "-an", "-r", str(FPS), "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+         "-t", f"{total:.2f}", str(out)])
+
 def _t(sec):
     sec = max(0, sec); cs = int(round(sec * 100))
     return f"{cs//360000}:{cs//6000%60:02d}:{cs//100%60:02d}.{cs%100:02d}"
@@ -222,14 +242,14 @@ def esc(t):
     return t.replace("\\", "\\\\").replace(":", "\\:").replace("'", "’").replace("%", "\\%")
 
 def foto_saja(row):
-    """True = baris tanpa gambar AI / video AI / video sendiri -> mode 3 foto Shopee, durasi ikut suara."""
+    """True = baris tanpa gambar AI / video AI / video sendiri -> mode foto saja (gambar AI acak + foto Shopee)."""
     no = g(row, "no")
     return not (g(row, "img_ai") or g(row, "vid_ai") or g(row, "vid_saya") or ai_on(no) or artis_on(no))
 
 def input_hash(row):
     keys = ["nama", "harga", "naskah", "img_ai", "vid_ai", "audio", "img_produk", "pendek",
             "vid_saya", "foto_lain", "durasi"]
-    return hashlib.md5(("|".join(g(row, k) for k in keys) + VOICE_ID + MODEL_KEY() + EDIT_VER + (MUSIK_VER if MUSIK_ON else "") + ("ai" + str(AI_SECS) if ai_on(g(row, "no")) else "") + ("loop" if g(row, "no") in LOOP_NOS else "") + ("pp" if g(row, "no") in PINGPONG_NOS else "") + ("nt" if g(row, "no") in TANPA_TEKS else "") + ("ar" if artis_on(g(row, "no")) else "") + (FOTO_VER if foto_saja(row) else "")).encode()).hexdigest()[:12]
+    return hashlib.md5(("|".join(g(row, k) for k in keys) + VOICE_ID + MODEL_KEY() + EDIT_VER + (MUSIK_VER if MUSIK_ON else "") + ("ai" + str(AI_SECS) if ai_on(g(row, "no")) else "") + ("loop" if g(row, "no") in LOOP_NOS else "") + ("pp" if g(row, "no") in PINGPONG_NOS else "") + ("nt" if g(row, "no") in TANPA_TEKS else "") + ("ar" if artis_on(g(row, "no")) else "") + (FOTO_VER + str(len(artis_pool())) if foto_saja(row) else "")).encode()).hexdigest()[:12]
 
 # ---- Klip video AI (Alibaba Wan, bayar per detik; hanya untuk No yang ada di config.json "ai_klip") ----
 AI_NOS = {str(x) for x in CFG.get("ai_klip", [])}
@@ -407,11 +427,18 @@ def render(row):
     artis_foto = fotos[0] if (g(row, "img_ai") and fotos) else None   # foto artis = kolom Gambar AI
     if not fotos and not clips: raise RuntimeError("Tidak ada video/foto sama sekali.")
     i = 0
+    pick = None            # gambar AI acak (mode foto saja)
     if mode3 and fotos:
-        # Bagi rata durasi suara ke tiap foto; foto terakhir menyambung sampai akhir -> tanpa layar hitam.
-        per = total / len(fotos)
-        while left > 0.05 and i < len(fotos):
-            secs = left if i == len(fotos) - 1 else min(per, left)
+        pool = artis_pool()
+        if pool:
+            pick = random.choice(pool)
+            secs = min(FOTO_AI_DETIK, left)
+            c = work / f"c{k}.mp4"; clip_from_image(pick, secs, c, variant=random.choice([2, 3]))   # geser kiri/kanan = goyang
+            clips.append(c); left -= secs; k += 1
+        # Sisa durasi dibagi rata ke tiap foto Shopee; foto terakhir menyambung sampai akhir -> tanpa layar hitam.
+        n = len(fotos); per = left / n if left > 0.05 else 0
+        while left > 0.05 and i < n:
+            secs = left if i == n - 1 else min(per, left)
             c = work / f"c{k}.mp4"; clip_from_image(fotos[i], secs, c, variant=i)
             clips.append(c); left -= secs; k += 1; i += 1
     else:
@@ -424,6 +451,13 @@ def render(row):
     lst.write_text("".join(f"file '{c.resolve()}'\n" for c in clips))
     joined = work / "joined.mp4"
     run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", str(joined)])
+    if pick and fotos:   # foto produk kecil goyang di atas caption bawah selama gambar AI tampil
+        try:
+            ov = work / "joined_ov.mp4"
+            tempel_produk_goyang(joined, fotos[0], min(FOTO_AI_DETIK, total), total, ov)
+            joined = ov
+        except Exception as e:
+            print("Foto produk kecil gagal ditempel", no, "-", str(e)[-200:])
 
     pendek = g(row, "pendek") or nama
     judul = esc(pendek[:30] + ("…" if len(pendek) > 30 else ""))
@@ -454,7 +488,9 @@ def render(row):
              "-map", "0:v", "-map", "1:a", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
              "-c:a", "aac", "-b:a", "128k", "-t", f"{total:.2f}", "-movflags", "+faststart", str(out)])
     catatan = f"Selesai {duration(out):.0f} dtk"
-    if mode3: catatan += f" ({len(fotos)} foto" + (", isi kolom AE untuk 3 foto)" if len(fotos) < 3 else ")")
+    if mode3:
+        catatan += f" ({len(fotos)} foto" + (f" + gambar AI {pick.name}" if pick else ", folder artis/ kosong") + ")"
+        if len(fotos) < 3: catatan += " - isi kolom AE untuk 3 foto"
     if tempo > 1.0: catatan += f" (suara dipercepat {tempo:.2f}x)"
     if a_dur / 1.25 > total: catatan += " - suara terpotong, pendekkan naskah"
     if ai_on(no) and not ai_gagal: catatan += " + klip AI"
