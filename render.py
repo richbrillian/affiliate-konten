@@ -7,6 +7,7 @@ Cara pakai di Sheet:
     GitHub mengecek tiap jam.
   - Hasil: output/<No>.mp4 + catatan di output/hasil.csv (tampil otomatis di kolom "Hasil render").
 Baris yang bahannya tidak berubah tidak dirender ulang (hemat waktu & kredit ElevenLabs).
+  - config.json "hanya_no": [27] = render HANYA nomor itu (kosong/tidak ada = semua baris).
 
 Urutan video: Video AI -> Video saya -> foto (gambar AI, foto produk, foto lain) bergantian
 dengan gerak zoom, sampai durasi terpenuhi. Kalau tidak ada video sama sekali, langsung foto.
@@ -535,13 +536,16 @@ def main():
     semua = [{h: (r[i] if i < len(r) else "") for h, i in idx.items()} for r in rd]
     semua = [r for r in semua if g(r, "no")]
     hasil = HASIL_DATA; hasil.update(load_hasil())
+    hanya = {str(x) for x in CFG.get("hanya_no", [])}   # config.json "hanya_no": [27] -> hanya nomor itu
     # 1) Suara: dibuat untuk semua baris yang punya naskah & kolom voice kosong (sekali saja per naskah).
     for r in semua:
+        if hanya and g(r, "no") not in hanya: continue
         if g(r, "naskah") and not g(r, "audio"):
             try: voice_for(r)
             except Exception as e: print("Suara gagal baris", g(r, "no"), "-", e)
     # 2) Video: semua baris KECUALI yang berisi "Tunggu", dan hanya kalau bahannya berubah.
     rows = [r for r in semua if g(r, "render").lower() != "tunggu"]
+    if hanya: rows = [r for r in rows if g(r, "no") in hanya]
     todo = [r for r in rows if hasil.get(g(r, "no"), {}).get("Hash") != input_hash(r)]
     wib = timezone(timedelta(hours=7)); gagal = 0
     for r in todo:
