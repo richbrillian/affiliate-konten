@@ -13,21 +13,22 @@ export type Props = {
 };
 const src = (s: string) => (s.startsWith('http') ? s : staticFile(s));
 
-// Foto bergerak (Ken Burns) + masuk dengan "pop"
-const Foto: React.FC<{u: string; dur: number; i: number}> = ({u, dur, i}) => {
+// Foto bergerak (Ken Burns) + masuk dengan "pop". pelan = gambar artis: zoom-in pelan & sedikit saja.
+const Foto: React.FC<{u: string; dur: number; i: number; pelan?: boolean}> = ({u, dur, i, pelan}) => {
   const f = useCurrentFrame(); const {fps} = useVideoConfig();
   const p = f / dur;
   const arah = i % 4;
-  const zoom = arah === 1 ? interpolate(p, [0, 1], [1.22, 1.02]) : interpolate(p, [0, 1], [1.02, 1.2]);
-  const geser = arah === 2 ? interpolate(p, [0, 1], [-40, 40]) : arah === 3 ? interpolate(p, [0, 1], [40, -40]) : 0;
+  const zoom = pelan ? interpolate(p, [0, 1], [1.0, 1.07])
+    : arah === 1 ? interpolate(p, [0, 1], [1.22, 1.02]) : interpolate(p, [0, 1], [1.02, 1.2]);
+  const geser = pelan ? 0 : arah === 2 ? interpolate(p, [0, 1], [-40, 40]) : arah === 3 ? interpolate(p, [0, 1], [40, -40]) : 0;
   const masuk = spring({frame: f, fps, config: {damping: 14, stiffness: 140}, durationInFrames: 14});
   const kelip = interpolate(f, [0, 3], [0.6, 0], {extrapolateRight: 'clamp'}); // kilatan tipis tiap pindah foto
   return (
     <AbsoluteFill style={{backgroundColor: '#111'}}>
-      <AbsoluteFill style={{transform: `scale(${0.96 + 0.04 * masuk})`, overflow: 'hidden'}}>
+      <AbsoluteFill style={{transform: `scale(${pelan ? 1 : 0.96 + 0.04 * masuk})`, overflow: 'hidden'}}>
         <Img src={src(u)} style={{width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${zoom}) translateX(${geser}px)`}} />
       </AbsoluteFill>
-      <AbsoluteFill style={{background: '#fff', opacity: kelip}} />
+      <AbsoluteFill style={{background: '#fff', opacity: pelan ? 0 : kelip}} />
     </AbsoluteFill>
   );
 };
@@ -114,18 +115,19 @@ const ArtisKecil: React.FC<{u: string}> = ({u}) => {
   );
 };
 
-// Foto produk kecil (150 px) goyang pelan di tengah, TEPAT DI ATAS subtitle (subtitle mulai ±y=1448,
-// foto menempati ±y=1235..1425) dan jauh di atas kotak KODE (±y=1645).
+// Foto produk kecil (300 px) goyang pelan di tengah, TEPAT DI ATAS subtitle (subtitle mulai ±y=1448,
+// foto menempati ±y=1094..1406 + goyangan) dan jauh di atas kotak KODE (±y=1645) serta di bawah badge terjual (±y=540).
+const UKURAN_KECIL = 300;
 const ProdukKecil: React.FC<{u: string}> = ({u}) => {
   const f = useCurrentFrame(); const {fps} = useVideoConfig();
   const masuk = spring({frame: f, fps, config: {damping: 10, stiffness: 120}});
   const miring = Math.sin(f / 7) * 4.5;
-  const geserX = Math.sin(f / 11) * 10;
-  const geserY = Math.sin(f / 9 + 1) * 7;
+  const geserX = Math.sin(f / 11) * 12;
+  const geserY = Math.sin(f / 9 + 1) * 6;
   return (
-    <div style={{position: 'absolute', left: 0, right: 0, top: 1245, height: 170, display: 'flex', justifyContent: 'center', alignItems: 'center'}}>
-      <div style={{transform: `translate(${geserX}px, ${geserY}px) rotate(${miring}deg) scale(${masuk})`, background: '#fff', padding: 6, borderRadius: 14, boxShadow: '0 8px 18px rgba(0,0,0,.45)'}}>
-        <Img src={src(u)} style={{width: 150, height: 150, objectFit: 'cover', borderRadius: 10, display: 'block'}} />
+    <div style={{position: 'absolute', left: 0, right: 0, top: 1085, height: 330, display: 'flex', justifyContent: 'center', alignItems: 'center'}}>
+      <div style={{transform: `translate(${geserX}px, ${geserY}px) rotate(${miring}deg) scale(${masuk})`, background: '#fff', padding: 6, borderRadius: 18, boxShadow: '0 10px 22px rgba(0,0,0,.5)'}}>
+        <Img src={src(u)} style={{width: UKURAN_KECIL, height: UKURAN_KECIL, objectFit: 'cover', borderRadius: 13, display: 'block'}} />
       </div>
     </div>
   );
@@ -137,27 +139,27 @@ export const Iklan: React.FC<Props> = (p) => {
   // Susunan: foto artis (artisDetik) -> maks 3 foto asli (fotoDetik tiap foto, artis kecil goyang di atasnya)
   // -> sisa waktu foto artis lagi. Kalau isiSisa: sisa waktu diisi foto produk (foto terakhir menyambung
   // sampai akhir) dan tidak ada artis lagi -> tidak ada layar hitam.
-  const bagian: {u: string; dur: number; i: number; kecil: boolean}[] = [];
+  const bagian: {u: string; dur: number; i: number; kecil: boolean; pelan: boolean}[] = [];
   let kecilMulai = -1, kecilDur = 0;
   let sisa = akhir, i = 0;
-  const tambah = (u: string, detik: number, kecil: boolean) => {
+  const tambah = (u: string, detik: number, kecil: boolean, pelan = false) => {
     const d = Math.min(sisa, Math.round(detik * fps));
     if (d > 0 && u) {
       if (kecil) { if (kecilMulai < 0) kecilMulai = akhir - sisa; kecilDur += d; }
-      bagian.push({u, dur: d, i: i++, kecil}); sisa -= d;
+      bagian.push({u, dur: d, i: i++, kecil, pelan}); sisa -= d;
     }
   };
-  tambah(p.artis, p.artisDetik, false);
+  tambah(p.artis, p.artisDetik, false, true);
   const ff = p.fotos.slice(0, 3);
   ff.forEach((u, n) => tambah(u, p.isiSisa && n === ff.length - 1 ? sisa / fps : p.fotoDetik, !!p.artisPotong));
-  if (sisa > 0 && !p.isiSisa) tambah(p.artis, sisa / fps, false);
+  if (sisa > 0 && !p.isiSisa) tambah(p.artis, sisa / fps, false, true);
   const produkDur = p.artis ? Math.min(akhir, Math.round(p.artisDetik * fps)) : 0;
   let mulai = 0;
   return (
     <AbsoluteFill style={{backgroundColor: '#000'}}>
       {bagian.map((s, n) => { const fr = mulai; mulai += s.dur; return (
         <Sequence key={n} from={fr} durationInFrames={s.dur}>
-          <Foto u={s.u} dur={s.dur} i={s.i} />
+          <Foto u={s.u} dur={s.dur} i={s.i} pelan={s.pelan} />
         </Sequence>); })}
       {p.artisPotong && kecilDur > 0 ? <Sequence from={kecilMulai} durationInFrames={kecilDur}><ArtisKecil u={p.artisPotong} /></Sequence> : null}
       {p.produkKecil && produkDur > 0 ? <Sequence from={0} durationInFrames={produkDur}><ProdukKecil u={p.produkKecil} /></Sequence> : null}
