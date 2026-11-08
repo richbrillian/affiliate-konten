@@ -12,6 +12,8 @@ export type Props = {
   isiSisa?: boolean; // true = sisa durasi diisi foto produk (foto terakhir menyambung sampai akhir), bukan artis lagi
 };
 const src = (s: string) => (s.startsWith('http') ? s : staticFile(s));
+const FONT = 'sans-serif';
+const THUMB_DETIK = 1.5; // detik awal yang berupa thumbnail (hanya baris tanpa gambar AI sendiri)
 
 // Foto bergerak (Ken Burns) + masuk dengan "pop". pelan = gambar artis: zoom-in pelan & sedikit saja.
 const Foto: React.FC<{u: string; dur: number; i: number; pelan?: boolean}> = ({u, dur, i, pelan}) => {
@@ -41,11 +43,11 @@ const Judul: React.FC<{judul: string; harga: string}> = ({judul, harga}) => {
   return (
     <>
       <div style={{position: 'absolute', top: 170, left: 0, right: 0, textAlign: 'center', transform: `translateY(${(1 - a) * -120}px) scale(${a})`}}>
-        <span style={{background: 'rgba(0,0,0,.6)', color: '#fff', fontSize: 50, fontWeight: 800, padding: '16px 30px', borderRadius: 18, fontFamily: 'sans-serif'}}>{judul}</span>
+        <span style={{background: 'rgba(0,0,0,.6)', color: '#fff', fontSize: 50, fontWeight: 800, padding: '16px 30px', borderRadius: 18, fontFamily: FONT}}>{judul}</span>
       </div>
       {harga && (
         <div style={{position: 'absolute', top: 300, left: 0, right: 0, textAlign: 'center', transform: `scale(${b * denyut}) rotate(${(1 - b) * -8}deg)`}}>
-          <span style={{background: '#FFD400', color: '#C8102E', fontSize: 84, fontWeight: 900, padding: '10px 36px', borderRadius: 24, fontFamily: 'sans-serif', boxShadow: '0 8px 0 #b38f00'}}>{harga}</span>
+          <span style={{background: '#FFD400', color: '#C8102E', fontSize: 84, fontWeight: 900, padding: '10px 36px', borderRadius: 24, fontFamily: FONT, boxShadow: '0 8px 0 #b38f00'}}>{harga}</span>
         </div>
       )}
     </>
@@ -63,7 +65,7 @@ const Subtitle: React.FC<{kata: Kata[]}> = ({kata}) => {
   const grup = kata.slice(gStart, gStart + 4);
   if (t < kata[gStart].mulai - 0.2 || t > kata[Math.min(gStart + 3, kata.length - 1)].mulai + kata[Math.min(gStart + 3, kata.length - 1)].durasi + 0.3) return null;
   return (
-    <div style={{position: 'absolute', bottom: 330, left: 50, right: 50, textAlign: 'center', fontFamily: 'sans-serif', fontWeight: 900, fontSize: 60, lineHeight: 1.18}}>
+    <div style={{position: 'absolute', bottom: 330, left: 50, right: 50, textAlign: 'center', fontFamily: FONT, fontWeight: 900, fontSize: 60, lineHeight: 1.18}}>
       {grup.map((k, j) => {
         const aktif = gStart + j === idx;
         return (
@@ -81,7 +83,7 @@ const Ajakan: React.FC<{kode: string}> = ({kode}) => {
   const goyang = Math.sin(f / 4) * 3;
   return (
     <div style={{position: 'absolute', bottom: 170, left: 0, right: 0, textAlign: 'center', transform: `scale(${m}) rotate(${goyang}deg)`}}>
-      <div style={{display: 'inline-block', background: '#EE4D2D', color: '#fff', fontFamily: 'sans-serif', fontWeight: 900, fontSize: 54, padding: '20px 40px', borderRadius: 26, boxShadow: '0 10px 0 #9c2d16'}}>
+      <div style={{display: 'inline-block', background: '#EE4D2D', color: '#fff', fontFamily: FONT, fontWeight: 900, fontSize: 54, padding: '20px 40px', borderRadius: 26, boxShadow: '0 10px 0 #9c2d16'}}>
         KODE {kode} • CEK LINK DI BIO 👆
       </div>
     </div>
@@ -94,7 +96,7 @@ const Terjual: React.FC<{t: string}> = ({t}) => {
   const m = spring({frame: f - 22, fps, config: {damping: 9, stiffness: 140}});
   return (
     <div style={{position: 'absolute', top: 430, left: 0, right: 0, textAlign: 'center', transform: `scale(${m * (1 + 0.025 * Math.sin(f / 6))})`}}>
-      <span style={{background: '#EE4D2D', color: '#fff', fontSize: 52, fontWeight: 900, padding: '10px 32px', borderRadius: 40, fontFamily: 'sans-serif', boxShadow: '0 6px 0 #9c2d16'}}>🔥 {t} TERJUAL</span>
+      <span style={{background: '#EE4D2D', color: '#fff', fontSize: 52, fontWeight: 900, padding: '10px 32px', borderRadius: 40, fontFamily: FONT, boxShadow: '0 6px 0 #9c2d16'}}>🔥 {t} TERJUAL</span>
     </div>
   );
 };
@@ -133,6 +135,46 @@ const ProdukKecil: React.FC<{u: string}> = ({u}) => {
   );
 };
 
+// THUMBNAIL: 1,5 detik pertama. Sudah tampil PENUH di frame 0 (tanpa animasi masuk) supaya jadi cover Reels/Shorts.
+// Susunan: atas = pita hook + nama produk besar (di atas kepala artis), tengah = wajah artis dibiarkan terlihat,
+// bawah = foto produk besar (kiri) + harga besar (kanan), semuanya di atas teks suara (±y=1448).
+const Thumbnail: React.FC<{judul: string; harga: string; terjual?: string; foto: string; total: number}> = ({judul, harga, terjual, foto, total}) => {
+  const f = useCurrentFrame();
+  const hilang = interpolate(f, [total - 7, total], [1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
+  const denyut = 1 + 0.025 * Math.sin(f / 3);
+  const goyang = Math.sin(f / 4) * 1.5;
+  const nama = judul.toUpperCase();
+  const stroke = {WebkitTextStroke: '12px #000', paintOrder: 'stroke fill', textShadow: '0 8px 0 #000'} as React.CSSProperties;
+  return (
+    <AbsoluteFill style={{opacity: hilang}}>
+      <AbsoluteFill style={{background: 'linear-gradient(180deg, rgba(0,0,0,.78) 0%, rgba(0,0,0,.35) 24%, rgba(0,0,0,0) 38%, rgba(0,0,0,0) 52%, rgba(0,0,0,.6) 100%)'}} />
+      {/* pita hook */}
+      <div style={{position: 'absolute', top: 120, left: 0, right: 0, textAlign: 'center', transform: `rotate(${-3 + goyang}deg) scale(${denyut})`}}>
+        <span style={{display: 'inline-block', background: '#EE4D2D', color: '#fff', fontFamily: FONT, fontWeight: 900, fontSize: 70, padding: '12px 40px', borderRadius: 20, boxShadow: '0 10px 0 #9c2d16', border: '6px solid #fff'}}>
+          {terjual ? `🔥 ${terjual} TERJUAL!` : '🔥 WAJIB PUNYA!'}
+        </span>
+      </div>
+      {/* nama produk besar */}
+      <div style={{position: 'absolute', top: 290, left: 40, right: 40, textAlign: 'center', fontFamily: FONT, fontWeight: 900, fontSize: 112, lineHeight: 1.02, color: '#fff', ...stroke}}>
+        {nama}
+      </div>
+      {/* foto produk besar (kiri bawah) */}
+      <div style={{position: 'absolute', left: 50, top: 1000, transform: `rotate(${-5 + goyang}deg)`, background: '#fff', padding: 10, borderRadius: 24, boxShadow: '0 14px 30px rgba(0,0,0,.6)'}}>
+        <Img src={src(foto)} style={{width: 440, height: 440, objectFit: 'cover', borderRadius: 16, display: 'block'}} />
+      </div>
+      {/* harga besar (kanan bawah) */}
+      {harga ? (
+        <div style={{position: 'absolute', left: 540, right: 30, top: 1060, textAlign: 'center', transform: `rotate(${4 - goyang}deg) scale(${denyut})`}}>
+          <div style={{background: '#FFD400', border: '8px solid #fff', borderRadius: 36, padding: '16px 10px', boxShadow: '0 14px 0 #b38f00'}}>
+            <div style={{fontFamily: FONT, fontWeight: 900, fontSize: 40, color: '#C8102E'}}>CUMA</div>
+            <div style={{fontFamily: FONT, fontWeight: 900, fontSize: 92, lineHeight: 1.05, color: '#C8102E'}}>{harga}</div>
+          </div>
+        </div>
+      ) : null}
+    </AbsoluteFill>
+  );
+};
+
 export const Iklan: React.FC<Props> = (p) => {
   const {fps} = useVideoConfig();
   const akhir = Math.round(p.durasi * fps);
@@ -154,6 +196,8 @@ export const Iklan: React.FC<Props> = (p) => {
   ff.forEach((u, n) => tambah(u, p.isiSisa && n === ff.length - 1 ? sisa / fps : p.fotoDetik, !!p.artisPotong));
   if (sisa > 0 && !p.isiSisa) tambah(p.artis, sisa / fps, false, true);
   const produkDur = p.artis ? Math.min(akhir, Math.round(p.artisDetik * fps)) : 0;
+  // thumbnail aktif hanya di mode "tanpa gambar AI sendiri" (ada foto produk kecil + gambar artis)
+  const thumb = p.produkKecil && produkDur > 0 ? Math.min(produkDur, Math.round(THUMB_DETIK * fps)) : 0;
   let mulai = 0;
   return (
     <AbsoluteFill style={{backgroundColor: '#000'}}>
@@ -162,9 +206,14 @@ export const Iklan: React.FC<Props> = (p) => {
           <Foto u={s.u} dur={s.dur} i={s.i} pelan={s.pelan} />
         </Sequence>); })}
       {p.artisPotong && kecilDur > 0 ? <Sequence from={kecilMulai} durationInFrames={kecilDur}><ArtisKecil u={p.artisPotong} /></Sequence> : null}
-      {p.produkKecil && produkDur > 0 ? <Sequence from={0} durationInFrames={produkDur}><ProdukKecil u={p.produkKecil} /></Sequence> : null}
-      <Judul judul={p.judul} harga={p.harga} />
-      {p.terjual ? <Terjual t={p.terjual} /> : null}
+      {thumb > 0 && p.produkKecil ? (
+        <Sequence from={0} durationInFrames={thumb}>
+          <Thumbnail judul={p.judul} harga={p.harga} terjual={p.terjual} foto={p.produkKecil} total={thumb} />
+        </Sequence>
+      ) : null}
+      {p.produkKecil && produkDur - thumb > 0 ? <Sequence from={thumb} durationInFrames={produkDur - thumb}><ProdukKecil u={p.produkKecil} /></Sequence> : null}
+      <Sequence from={thumb}><Judul judul={p.judul} harga={p.harga} /></Sequence>
+      {p.terjual ? <Sequence from={thumb}><Terjual t={p.terjual} /></Sequence> : null}
       <Subtitle kata={p.kata} />
       <Sequence from={Math.max(0, akhir - 3 * fps)}><Ajakan kode={p.kode} /></Sequence>
       {p.audio ? <Audio src={src(p.audio)} /> : null}
