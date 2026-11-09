@@ -90,15 +90,26 @@ def MODEL_KEY():
     m = os.getenv("TTS_MODEL") or TTS_MODEL_DEFAULT
     return "" if m == "eleven_multilingual_v2" else m   # v2 = kunci lama (cache tetap terpakai)
 
-def tts(text):
+def baru(no):
+    """Video batch baru (No >= config.json "suara_baru_mulai", default 28): suara lebih tegas + musik lebih pelan.
+    Video lama tidak berubah (hash tetap -> tidak dirender ulang)."""
+    return str(no).isdigit() and int(no) >= int(CFG.get("suara_baru_mulai", 28))
+VOICE_SET = CFG.get("voice_settings", {"stability": 0.45, "similarity_boost": 0.8, "style": 0.35, "use_speaker_boost": True})
+MUSIK_VOL_BARU = float(CFG.get("musik_vol_baru", 0.06))   # lama: 0.13
+SUARA_VOL_BARU = float(CFG.get("suara_vol_baru", 1.15))
+BARU_VER = "vs2"
+
+def tts(text, pakai_set=False):
     """ElevenLabs TTS, di-cache per naskah -> kredit tidak terbuang."""
     model = os.getenv("TTS_MODEL") or TTS_MODEL_DEFAULT
-    p = CACHE / ("tts-" + hashlib.md5((VOICE_ID + MODEL_KEY() + text).encode()).hexdigest() + ".mp3")
+    p = CACHE / ("tts-" + hashlib.md5((VOICE_ID + MODEL_KEY() + text + (BARU_VER if pakai_set else "")).encode()).hexdigest() + ".mp3")
     if p.exists(): return p
     key = os.environ.get("ELEVENLABS_API_KEY")
     if not key: raise RuntimeError("Secret ELEVENLABS_API_KEY belum diisi dan kolom voice kosong.")
     if model in ("eleven_v3", "eleven_v4"): text = tag_text(text)
-    body = json.dumps({"text": text, "model_id": model}).encode()
+    payload = {"text": text, "model_id": model}
+    if pakai_set: payload["voice_settings"] = VOICE_SET
+    body = json.dumps(payload).encode()
     req = urllib.request.Request(f"https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}",
         data=body, headers={"xi-api-key": key, "Content-Type": "application/json", "Accept": "audio/mpeg"})
     p.write_bytes(urllib.request.urlopen(req, timeout=120).read())
@@ -250,7 +261,7 @@ def foto_saja(row):
 def input_hash(row):
     keys = ["nama", "harga", "naskah", "img_ai", "vid_ai", "audio", "img_produk", "pendek",
             "vid_saya", "foto_lain", "durasi"]
-    return hashlib.md5(("|".join(g(row, k) for k in keys) + VOICE_ID + MODEL_KEY() + EDIT_VER + (MUSIK_VER if MUSIK_ON else "") + ("ai" + str(AI_SECS) if ai_on(g(row, "no")) else "") + ("loop" if g(row, "no") in LOOP_NOS else "") + ("pp" if g(row, "no") in PINGPONG_NOS else "") + ("nt" if g(row, "no") in TANPA_TEKS else "") + ("ar" if artis_on(g(row, "no")) else "") + (FOTO_VER + str(len(artis_pool())) if foto_saja(row) else "")).encode()).hexdigest()[:12]
+    return hashlib.md5(("|".join(g(row, k) for k in keys) + VOICE_ID + MODEL_KEY() + EDIT_VER + (MUSIK_VER if MUSIK_ON else "") + ("ai" + str(AI_SECS) if ai_on(g(row, "no")) else "") + ("loop" if g(row, "no") in LOOP_NOS else "") + ("pp" if g(row, "no") in PINGPONG_NOS else "") + ("nt" if g(row, "no") in TANPA_TEKS else "") + ("ar" if artis_on(g(row, "no")) else "") + (FOTO_VER + str(len(artis_pool())) if foto_saja(row) else "") + (BARU_VER + str(MUSIK_VOL_BARU) + str(SUARA_VOL_BARU) if baru(g(row, "no")) else "")).encode()).hexdigest()[:12]
 
 # ---- Klip video AI (Alibaba Wan, bayar per detik; hanya untuk No yang ada di config.json "ai_klip") ----
 AI_NOS = {str(x) for x in CFG.get("ai_klip", [])}
@@ -474,11 +485,11 @@ def render(row):
     vf += f",subtitles='{ass.resolve()}':fontsdir={Path(FONT).parent}"
     if str(no) in TANPA_TEKS or (artis_v and not CFG.get("artis_teks", False)):
         vf = "tpad=stop_mode=clone:stop_duration=5"
-    af = (f"atempo={tempo:.3f}," if tempo > 1.0 else "") + f"apad,afade=t=out:st={max(0, total-0.4):.2f}:d=0.4"
+    af = (f"volume={SUARA_VOL_BARU}," if baru(no) else "") + (f"atempo={tempo:.3f}," if tempo > 1.0 else "") + f"apad,afade=t=out:st={max(0, total-0.4):.2f}:d=0.4"
     out = OUT / f"{no}.mp4"
     if MUSIK_ON:
         mus = make_music()
-        fc = (f"[1:a]{af}[v];[2:a]volume=0.13,afade=t=in:d=1,afade=t=out:st={max(0, total-1.2):.2f}:d=1.2[m];"
+        fc = (f"[1:a]{af}[v];[2:a]volume={MUSIK_VOL_BARU if baru(no) else 0.13},afade=t=in:d=1,afade=t=out:st={max(0, total-1.2):.2f}:d=1.2[m];"
               f"[v][m]amix=inputs=2:duration=first:normalize=0[a]")
         run(["ffmpeg", "-y", "-i", str(joined), "-i", str(audio), "-stream_loop", "-1", "-i", str(mus),
              "-filter_complex", fc, "-vf", vf, "-map", "0:v", "-map", "[a]",
@@ -504,12 +515,12 @@ def voice_for(row):
     """Suara ElevenLabs per baris -> output/suara-<No>.mp4 (bisa didengar & tidak dibuat ulang)."""
     no, text = g(row, "no"), g(row, "naskah")
     if not text: raise RuntimeError("Naskah suara (kolom L) kosong.")
-    h = hashlib.md5((VOICE_ID + MODEL_KEY() + text).encode()).hexdigest()[:12]
+    h = hashlib.md5((VOICE_ID + MODEL_KEY() + text + (BARU_VER if baru(no) else "")).encode()).hexdigest()[:12]
     out = OUT / f"suara-{no}.mp4"
     rec = HASIL_DATA.setdefault(no, {"No": no})
     if rec.get("SuaraHash") == h and out.exists():
         return out
-    run(["ffmpeg", "-y", "-i", str(tts(text)), "-vn", "-c:a", "aac", "-b:a", "128k", str(out)])
+    run(["ffmpeg", "-y", "-i", str(tts(text, baru(no))), "-vn", "-c:a", "aac", "-b:a", "128k", str(out)])
     rec["SuaraHash"] = h
     rec["Suara"] = f"{duration(out):.0f}"
     return out
