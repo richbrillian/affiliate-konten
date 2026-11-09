@@ -1,7 +1,7 @@
 """Bu Rina: render 1 video tips FB Pro (40 dtk) dari naskah.json berikutnya, lalu kabari Make untuk posting.
 
 Dijalankan GitHub Actions 5x sehari. Suara: ElevenLabs (Riri, tegas), 8 potong per video.
-Foto: acak dari burina/ dan burina/foto/ (cadangan: artis/). Hasil: burina/out/<id>.mp4, catatan di burina/sudah.json.
+Foto: acak dari burina/, burina/foto/ dan artis/. Hasil: burina/out/<id>.mp4, catatan di burina/sudah.json.
 """
 import json, os, random, shutil, subprocess, sys, urllib.request
 from pathlib import Path
@@ -82,10 +82,8 @@ def main():
     ins = sum([["-i", str(kerja / f"s{i}.mp3")] for i in range(8)], []) + ["-i", str(kerja / "musik.wav")]
     sh(["ffmpeg", "-loglevel", "error", "-y", *ins, "-filter_complex", fc, "-map", "[a]", "-t", "40", str(kerja / "audio.wav")])
 
-    ambil = lambda ds: [p for d in ds if d.exists() for p in d.iterdir() if p.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp")]
-    pool = ambil([ROOT, ROOT / "foto"])  # foto Bu Rina yang diunggah
-    if len(pool) < 3:
-        pool += ambil([REPO / "artis"])
+    pool = [p for d in (ROOT, ROOT / "foto", REPO / "artis") if d.exists() for p in d.iterdir()
+            if p.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp")]  # 20 foto: baru + artis lama
     pilih = random.sample(pool, 3)
     pub = REMO / "public" / "foto"; shutil.rmtree(pub, ignore_errors=True); pub.mkdir(parents=True)
     foto = []
