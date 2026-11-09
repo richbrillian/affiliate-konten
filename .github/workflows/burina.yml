@@ -1,0 +1,44 @@
+name: Bu Rina (5 video sehari)
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 23 * * *"  # 06:17 WIB
+    - cron: "17 4 * * *"   # 11:17 WIB
+    - cron: "17 8 * * *"   # 15:17 WIB
+    - cron: "47 10 * * *"  # 17:47 WIB
+    - cron: "47 12 * * *"  # 19:47 WIB
+permissions:
+  contents: write
+concurrency:
+  group: burina
+  cancel-in-progress: false
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: burina/remo/node_modules
+          key: burina-npm-${{ hashFiles('burina/remo/package.json') }}
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core python3-numpy libnss3 libdbus-1-3 libatk1.0-0 libxrandr2 libxkbcommon0 libxfixes3 libxcomposite1 libxdamage1 libgbm1 libcups2 libatk-bridge2.0-0 libpango-1.0-0 libcairo2 libasound2t64 || true
+      - name: Render video berikutnya
+        run: python3 burina/render.py
+        env:
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+      - name: Simpan ke repo
+        run: |
+          git config user.name "render-bot"; git config user.email "bot@users.noreply.github.com"
+          git add burina/out/*.mp4 burina/sudah.json burina/terakhir.json 2>/dev/null || true
+          git diff --cached --quiet && echo "tidak ada video baru" && exit 0
+          git commit -m "Bu Rina: video baru" && git pull --rebase && git push
+          echo "BARU=1" >> $GITHUB_ENV
+      - name: Kabari Make untuk posting ke Facebook
+        if: env.BARU == '1'
+        run: |
+          sleep 20
+          HOOK=$(python3 -c "import json;print(json.load(open('burina/config.json'))['make_webhook'])")
+          curl -sS -X POST -H "Content-Type: application/json" --data @burina/terakhir.json "$HOOK"
