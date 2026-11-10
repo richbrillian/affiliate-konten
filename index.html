@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Racun Belanja – Cari Kode</title>
-<meta name="description" content="Ketik kode dari video untuk membuka produknya di Shopee.">
+<meta name="description" content="Ketik kode dari video untuk membuka produknya di Shopee. Produk terbaru ada di paling atas.">
 <style>
 :root{--bg:#fff7f3;--card:#fff;--ink:#222;--mut:#6b6b6b;--brand:#ee4d2d;--line:#f1d9d1}
 @media (prefers-color-scheme:dark){:root{--bg:#161211;--card:#221c1a;--ink:#f3eeec;--mut:#b3a9a6;--line:#3a2f2c}}
@@ -19,12 +19,15 @@ h1{margin:0 0 8px;font-size:20px}
 .sosial{max-width:640px;margin:0 auto;padding:14px 16px 0;display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
 .sosial a{background:var(--card);color:var(--brand);border:1px solid var(--line);font-weight:700;font-size:14px;padding:8px 14px;border-radius:999px;text-decoration:none}
 main{max-width:640px;margin:0 auto;padding:12px 16px 40px;display:grid;gap:10px}
-a.kartu{display:flex;gap:12px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px;color:inherit;text-decoration:none}
+a.kartu{display:grid;grid-template-columns:auto 1fr;gap:10px 12px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;color:inherit;text-decoration:none}
 a.kartu.sorot{outline:3px solid var(--brand)}
-.foto{width:76px;height:76px;border-radius:10px;object-fit:cover;background:#eee;flex:none}
-.kode{flex:none;width:44px;height:44px;border-radius:50%;background:var(--brand);color:#fff;font-weight:800;display:grid;place-items:center;font-size:18px}
-.teks{flex:1;min-width:0}.nama{font-weight:700}.harga{color:var(--brand);font-weight:700}
-.beli{font-size:13px;color:var(--mut)}
+.fotowrap{position:relative;flex:none}
+.foto{display:block;width:104px;height:104px;border-radius:10px;object-fit:cover;background:#eee;flex:none}
+.kode{position:absolute;left:-6px;top:-6px;min-width:36px;height:36px;padding:0 6px;border-radius:18px;background:var(--brand);color:#fff;font-weight:800;display:grid;place-items:center;font-size:16px;border:2px solid var(--card)}
+.teks{min-width:0}.nama{font-weight:700}.harga{color:var(--brand);font-weight:800;font-size:20px}
+.laku{font-size:13px;color:var(--mut)}
+.baru{display:inline-block;background:#ffd400;color:#7a1d00;font-size:11px;font-weight:800;padding:2px 7px;border-radius:6px;margin-right:6px;vertical-align:middle}
+.beli{grid-column:1/-1;background:var(--brand);color:#fff;font-weight:800;font-size:17px;text-align:center;padding:13px;border-radius:12px}
 .kosong{text-align:center;color:var(--mut);padding:30px}
 footer{text-align:center;font-size:12px;color:var(--mut);padding:0 16px 24px}
 </style>
@@ -49,15 +52,17 @@ footer{text-align:center;font-size:12px;color:var(--mut);padding:0 16px 24px}
 <main id="daftar"><div class="kosong">Memuat…</div></main>
 <footer>Link di halaman ini adalah link affiliate Shopee. Harga bisa berubah, cek di Shopee.</footer>
 <script>
-let semua=[];
+let semua=[],baru=new Set();
+const laku=t=>/^\d[\d.,]*\s*(RB|JT)?\+?$/i.test(t||"")?`<div class="laku">${t} terjual</div>`:"";
 const rp=n=>"Rp"+Number(n).toLocaleString("id-ID");
 const img=u=>"https://images.weserv.nl/?w=200&h=200&fit=cover&url="+encodeURIComponent(u);
 function tampil(list,sorot){
   const d=document.getElementById("daftar");
   if(!list.length){d.innerHTML='<div class="kosong">Produk tidak ditemukan.</div>';return}
   d.innerHTML=list.map(p=>`<a class="kartu${p.kode==sorot?' sorot':''}" id="kode-${p.kode}" href="${p.link}" rel="nofollow sponsored">
-    <div class="kode">${p.kode}</div><img class="foto" loading="lazy" src="${img(p.foto)}" alt="">
-    <div class="teks"><div class="nama">${p.nama}</div><div class="harga">${rp(p.harga)}</div><div class="beli">Ketuk untuk beli di Shopee ›</div></div></a>`).join("");
+    <div class="fotowrap"><img class="foto" loading="lazy" src="${img(p.foto)}" alt=""><div class="kode">${p.kode}</div></div>
+    <div class="teks"><div class="nama">${baru.has(p.kode)?'<span class="baru">BARU</span>':''}${p.nama}</div>${p.harga?`<div class="harga">${rp(p.harga)}</div>`:''}${laku(p.terjual)}</div>
+    <div class="beli">Beli di Shopee ›</div></a>`).join("");
 }
 function cari(){
   const q=document.getElementById("q").value.trim();
@@ -69,7 +74,8 @@ function cari(){
   tampil(hasil,n); history.replaceState(null,"",q?"#"+q:location.pathname);
 }
 fetch("produk.json?v="+Date.now()).then(r=>r.json()).then(d=>{
-  semua=d.sort((a,b)=>a.kode-b.kode);
+  semua=d.sort((a,b)=>b.kode-a.kode);   // produk terbaru di atas
+  baru=new Set(semua.slice(0,5).map(p=>p.kode));
   const h=decodeURIComponent(location.hash.slice(1));
   if(h){document.getElementById("q").value=h;cari()}else tampil(semua);
 }).catch(()=>{document.getElementById("daftar").innerHTML='<div class="kosong">Gagal memuat daftar. Coba muat ulang.</div>'});

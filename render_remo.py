@@ -186,6 +186,15 @@ def remo_render(row):
         tj = re.search(r"\d[\d.,]*\s*(?:RB|rb|JT|jt|K|k)?\+?", row.get("Terjual") or "")
         if tj:
             props["terjual"] = tj.group(0).strip().upper()
+        # rating di badge terjual, hook (kalimat pertama naskah) di 2,5 dtk awal, ajakan komentar bila naskah bertanya di akhir
+        rt = re.search(r"\d(?:[.,]\d+)?", row.get("Rating") or "")
+        if rt and props.get("terjual"):
+            props["rating"] = rt.group(0).replace(".", ",")
+        kal = [s.strip() for s in re.findall(r"[^.!?]+[.!?]+", g(row, "naskah"))]
+        if kal and kal[0][-1] in "?!" and len(kal[0]) <= 42:
+            props["hook"] = kal[0]
+        if len(kal) > 2 and any(s.endswith("?") for s in kal[-2:]):
+            props["tanya"] = True
         if potong:
             props["artisPotong"] = potong
         pj = M.CACHE / f"remo-props-{no}.json"

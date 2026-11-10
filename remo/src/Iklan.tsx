@@ -9,10 +9,14 @@ export type Props = {
   terjual?: string; // mis. "378RB+"
   artisPotong?: string; // PNG artis tanpa latar (kecil, goyang di atas foto produk)
   produkKecil?: string; // foto produk kecil yang goyang di atas subtitle selama gambar artis tampil
+  hook?: string; // kalimat pembuka (dari naskah) yang tampil besar di 2,5 detik pertama
+  rating?: string; // mis. "4,9"
+  tanya?: boolean; // naskah diakhiri pertanyaan -> ajakan jawab di komentar
   isiSisa?: boolean; // true = sisa durasi diisi foto produk (foto terakhir menyambung sampai akhir), bukan artis lagi
 };
 const src = (s: string) => (s.startsWith('http') ? s : staticFile(s));
 const FONT = 'sans-serif';
+const HOOK_DETIK = 2.5; // lama thumbnail kalau ada hook
 const THUMB_DETIK = 1.5; // detik awal yang berupa thumbnail (hanya baris tanpa gambar AI sendiri)
 
 // Foto bergerak (Ken Burns) + masuk dengan "pop". pelan = gambar artis: zoom-in pelan & sedikit saja.
@@ -77,26 +81,35 @@ const Subtitle: React.FC<{kata: Kata[]}> = ({kata}) => {
   );
 };
 
-const Ajakan: React.FC<{kode: string}> = ({kode}) => {
+const Ajakan: React.FC<{kode: string; tanya?: boolean}> = ({kode, tanya}) => {
   const f = useCurrentFrame(); const {fps} = useVideoConfig();
   const m = spring({frame: f, fps, config: {damping: 9, stiffness: 120}});
   const goyang = Math.sin(f / 4) * 3;
   return (
-    <div style={{position: 'absolute', bottom: 170, left: 0, right: 0, textAlign: 'center', transform: `scale(${m}) rotate(${goyang}deg)`}}>
-      <div style={{display: 'inline-block', background: '#EE4D2D', color: '#fff', fontFamily: FONT, fontWeight: 900, fontSize: 54, padding: '20px 40px', borderRadius: 26, boxShadow: '0 10px 0 #9c2d16'}}>
-        KODE {kode} • CEK LINK DI BIO 👆
+    <>
+      {tanya ? (
+        <div style={{position: 'absolute', bottom: 520, left: 0, right: 0, textAlign: 'center', transform: `scale(${m * (1 + 0.03 * Math.sin(f / 5))})`}}>
+          <div style={{display: 'inline-block', background: '#fff', color: '#111', fontFamily: FONT, fontWeight: 900, fontSize: 56, padding: '18px 38px', borderRadius: 26, border: '6px solid #EE4D2D', boxShadow: '0 10px 0 rgba(0,0,0,.45)'}}>
+            💬 JAWAB DI KOMENTAR 👇
+          </div>
+        </div>
+      ) : null}
+      <div style={{position: 'absolute', bottom: 170, left: 0, right: 0, textAlign: 'center', transform: `scale(${m}) rotate(${goyang}deg)`}}>
+        <div style={{display: 'inline-block', background: '#EE4D2D', color: '#fff', fontFamily: FONT, fontWeight: 900, fontSize: 54, padding: '20px 40px', borderRadius: 26, boxShadow: '0 10px 0 #9c2d16'}}>
+          KODE {kode} • CEK LINK DI BIO 👆
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 
 // Badge jumlah terjual
-const Terjual: React.FC<{t: string}> = ({t}) => {
+const Terjual: React.FC<{t: string; r?: string}> = ({t, r}) => {
   const f = useCurrentFrame(); const {fps} = useVideoConfig();
   const m = spring({frame: f - 22, fps, config: {damping: 9, stiffness: 140}});
   return (
     <div style={{position: 'absolute', top: 430, left: 0, right: 0, textAlign: 'center', transform: `scale(${m * (1 + 0.025 * Math.sin(f / 6))})`}}>
-      <span style={{background: '#EE4D2D', color: '#fff', fontSize: 52, fontWeight: 900, padding: '10px 32px', borderRadius: 40, fontFamily: FONT, boxShadow: '0 6px 0 #9c2d16'}}>🔥 {t} TERJUAL</span>
+      <span style={{background: '#EE4D2D', color: '#fff', fontSize: r ? 46 : 52, fontWeight: 900, padding: '10px 32px', borderRadius: 40, fontFamily: FONT, boxShadow: '0 6px 0 #9c2d16'}}>🔥 {t} TERJUAL{r ? ' • ⭐ ' + r : ''}</span>
     </div>
   );
 };
@@ -138,12 +151,14 @@ const ProdukKecil: React.FC<{u: string}> = ({u}) => {
 // THUMBNAIL: 1,5 detik pertama. Sudah tampil PENUH di frame 0 (tanpa animasi masuk) supaya jadi cover Reels/Shorts.
 // Susunan: atas = pita hook + nama produk besar (di atas kepala artis), tengah = wajah artis dibiarkan terlihat,
 // bawah = foto produk besar (kiri) + harga besar (kanan), semuanya di atas teks suara (±y=1448).
-const Thumbnail: React.FC<{judul: string; harga: string; terjual?: string; foto: string; total: number}> = ({judul, harga, terjual, foto, total}) => {
+const Thumbnail: React.FC<{judul: string; harga: string; terjual?: string; foto: string; total: number; hook?: string}> = ({judul, harga, terjual, foto, total, hook}) => {
   const f = useCurrentFrame();
   const hilang = interpolate(f, [total - 7, total], [1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
   const denyut = 1 + 0.025 * Math.sin(f / 3);
   const goyang = Math.sin(f / 4) * 1.5;
-  const nama = judul.toUpperCase();
+  // ada hook: kalimat pembuka menggantikan nama produk, harga disimpan dulu (muncul setelah thumbnail)
+  const nama = (hook || judul).toUpperCase();
+  const besar = hook ? (hook.length > 28 ? 88 : 100) : 112;
   const stroke = {WebkitTextStroke: '12px #000', paintOrder: 'stroke fill', textShadow: '0 8px 0 #000'} as React.CSSProperties;
   return (
     <AbsoluteFill style={{opacity: hilang}}>
@@ -155,15 +170,15 @@ const Thumbnail: React.FC<{judul: string; harga: string; terjual?: string; foto:
         </span>
       </div>
       {/* nama produk besar */}
-      <div style={{position: 'absolute', top: 290, left: 40, right: 40, textAlign: 'center', fontFamily: FONT, fontWeight: 900, fontSize: 112, lineHeight: 1.02, color: '#fff', ...stroke}}>
+      <div style={{position: 'absolute', top: 290, left: 40, right: 40, textAlign: 'center', fontFamily: FONT, fontWeight: 900, fontSize: besar, lineHeight: 1.05, color: hook ? '#FFE600' : '#fff', ...stroke}}>
         {nama}
       </div>
       {/* foto produk besar (kiri bawah) */}
-      <div style={{position: 'absolute', left: 50, top: 1000, transform: `rotate(${-5 + goyang}deg)`, background: '#fff', padding: 10, borderRadius: 24, boxShadow: '0 14px 30px rgba(0,0,0,.6)'}}>
+      <div style={{position: 'absolute', left: hook ? 310 : 50, top: 1000, transform: `rotate(${-5 + goyang}deg)`, background: '#fff', padding: 10, borderRadius: 24, boxShadow: '0 14px 30px rgba(0,0,0,.6)'}}>
         <Img src={src(foto)} style={{width: 440, height: 440, objectFit: 'cover', borderRadius: 16, display: 'block'}} />
       </div>
       {/* harga besar (kanan bawah) */}
-      {harga ? (
+      {harga && !hook ? (
         <div style={{position: 'absolute', left: 540, right: 30, top: 1060, textAlign: 'center', transform: `rotate(${4 - goyang}deg) scale(${denyut})`}}>
           <div style={{background: '#FFD400', border: '8px solid #fff', borderRadius: 36, padding: '16px 10px', boxShadow: '0 14px 0 #b38f00'}}>
             <div style={{fontFamily: FONT, fontWeight: 900, fontSize: 40, color: '#C8102E'}}>CUMA</div>
@@ -197,7 +212,7 @@ export const Iklan: React.FC<Props> = (p) => {
   if (sisa > 0 && !p.isiSisa) tambah(p.artis, sisa / fps, false, true);
   const produkDur = p.artis ? Math.min(akhir, Math.round(p.artisDetik * fps)) : 0;
   // thumbnail aktif hanya di mode "tanpa gambar AI sendiri" (ada foto produk kecil + gambar artis)
-  const thumb = p.produkKecil && produkDur > 0 ? Math.min(produkDur, Math.round(THUMB_DETIK * fps)) : 0;
+  const thumb = p.produkKecil && produkDur > 0 ? Math.min(produkDur, Math.round((p.hook ? HOOK_DETIK : THUMB_DETIK) * fps)) : 0;
   let mulai = 0;
   return (
     <AbsoluteFill style={{backgroundColor: '#000'}}>
@@ -208,14 +223,14 @@ export const Iklan: React.FC<Props> = (p) => {
       {p.artisPotong && kecilDur > 0 ? <Sequence from={kecilMulai} durationInFrames={kecilDur}><ArtisKecil u={p.artisPotong} /></Sequence> : null}
       {thumb > 0 && p.produkKecil ? (
         <Sequence from={0} durationInFrames={thumb}>
-          <Thumbnail judul={p.judul} harga={p.harga} terjual={p.terjual} foto={p.produkKecil} total={thumb} />
+          <Thumbnail judul={p.judul} harga={p.harga} terjual={p.terjual} foto={p.produkKecil} total={thumb} hook={p.hook} />
         </Sequence>
       ) : null}
       {p.produkKecil && produkDur - thumb > 0 ? <Sequence from={thumb} durationInFrames={produkDur - thumb}><ProdukKecil u={p.produkKecil} /></Sequence> : null}
       <Sequence from={thumb}><Judul judul={p.judul} harga={p.harga} /></Sequence>
-      {p.terjual ? <Sequence from={thumb}><Terjual t={p.terjual} /></Sequence> : null}
+      {p.terjual ? <Sequence from={thumb}><Terjual t={p.terjual} r={p.rating} /></Sequence> : null}
       <Subtitle kata={p.kata} />
-      <Sequence from={Math.max(0, akhir - 3 * fps)}><Ajakan kode={p.kode} /></Sequence>
+      <Sequence from={Math.max(0, akhir - 3 * fps)}><Ajakan kode={p.kode} tanya={p.tanya} /></Sequence>
       {p.audio ? <Audio src={src(p.audio)} /> : null}
       {p.musik ? <Audio src={src(p.musik)} volume={(f) => 0.13 * interpolate(f, [0, 30, akhir - 36, akhir], [0, 1, 1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})} loop /> : null}
     </AbsoluteFill>
