@@ -263,7 +263,7 @@ KODE_SUARA_MULAI = int(CFG.get("kode_suara_mulai", 200))   # No >= ini: kode pro
 def naskah_ucap(row):
     """Naskah yang diucapkan & jadi subtitle. Produk baru: 'Kode N' disebut sebelum ajakan cek link di bio."""
     no = g(row, "no"); text = g(row, "naskah")
-    if not (text and str(no).isdigit() and int(no) >= KODE_SUARA_MULAI) or re.search(r"\bkode\s+\d", text, re.I):
+    if not (text and str(no).isdigit() and int(no) >= KODE_SUARA_MULAI) or re.search(r"\bkode\b", text, re.I):
         return text
     ajakan = f"Kode {no}, cek link di bio!"
     hasil, n = re.subn(r"cek link di bio\W*$", ajakan, text.strip(), flags=re.I)
