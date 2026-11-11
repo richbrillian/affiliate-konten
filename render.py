@@ -59,6 +59,7 @@ COL = {
     "foto_lain": "Foto produk lain (link, pisah koma)",
     "durasi": "Durasi video (detik)",
     "render": "Render",
+    "hook": "Kalimat pembuka (teks besar di awal video)",
 }
 YA = {"true", "benar", "ya", "1", "x", "v", "✓"}
 
@@ -202,7 +203,7 @@ def _t(sec):
     sec = max(0, sec); cs = int(round(sec * 100))
     return f"{cs//360000}:{cs//6000%60:02d}:{cs//100%60:02d}.{cs%100:02d}"
 
-def make_ass(path, no, text, speech_dur, total):
+def make_ass(path, no, text, speech_dur, total, pembuka=""):
     """Subtitle ala TikTok: 3-4 kata per layar, kata yang sedang diucapkan menyala kuning,
     + teks hook di awal dan kartu penutup. Waktu kata diperkirakan dari panjang huruf."""
     words = text.split()
@@ -218,6 +219,11 @@ def make_ass(path, no, text, speech_dur, total):
             chunks.append(cur); cur = []
     if cur: chunks.append(cur)
     hook = HOOKS[int(no) % len(HOOKS)] if str(no).isdigit() else HOOKS[0]
+    hook_akhir, hook_mv, hook_fs = 2.6, 0, ""
+    if pembuka:   # kalimat pembuka dari Sheet: gantikan hook umum, lebih tinggi & sedikit lebih lama
+        hook = re.sub(r"[{}\\\r\n]+", " ", pembuka).strip()
+        hook_akhir, hook_mv = 3.2, 800
+        if len(hook) > 30: hook_fs = "\\fs70"
     lines = [
         "[Script Info]", "ScriptType: v4.00+", "PlayResX: 1080", "PlayResY: 1920", "WrapStyle: 0",
         "ScaledBorderAndShadow: yes", "", "[V4+ Styles]",
@@ -227,7 +233,7 @@ def make_ass(path, no, text, speech_dur, total):
         "Style: Hook,DejaVu Sans,84,&H00FFFFFF,&H00FFFFFF,&H002D4DEE,&H00000000,-1,0,0,0,100,100,0,0,3,18,0,8,60,60,1000,1",
         "Style: End,DejaVu Sans,110,&H00FFFFFF,&H00FFFFFF,&H002D4DEE,&H00000000,-1,0,0,0,100,100,0,0,3,26,0,5,60,60,0,1",
         "", "[Events]", "Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text"]
-    lines.append(f"Dialogue: 0,{_t(0.05)},{_t(2.6)},Hook,,0,0,0,,{{\\fad(150,200)}}{hook}")
+    lines.append(f"Dialogue: 0,{_t(0.05)},{_t(hook_akhir)},Hook,,0,0,{hook_mv},,{{\\fad(150,200){hook_fs}}}{hook}")
     for ch in chunks:
         s, e = ch[0][1], ch[-1][1] + ch[-1][2]
         body = "".join(f"{{\\k{max(1,int(d*100))}}}{w} " for w, _, d in ch).strip()
@@ -253,6 +259,16 @@ def tag_text(text):
 def esc(t):
     return t.replace("\\", "\\\\").replace(":", "\\:").replace("'", "’").replace("%", "\\%")
 
+KODE_SUARA_MULAI = int(CFG.get("kode_suara_mulai", 200))   # No >= ini: kode produk ikut diucapkan (video lama tidak berubah)
+def naskah_ucap(row):
+    """Naskah yang diucapkan & jadi subtitle. Produk baru: 'Kode N' disebut sebelum ajakan cek link di bio."""
+    no = g(row, "no"); text = g(row, "naskah")
+    if not (text and str(no).isdigit() and int(no) >= KODE_SUARA_MULAI) or re.search(r"\bkode\s+\d", text, re.I):
+        return text
+    ajakan = f"Kode {no}, cek link di bio!"
+    hasil, n = re.subn(r"cek link di bio\W*$", ajakan, text.strip(), flags=re.I)
+    return hasil if n else text.strip() + " " + ajakan
+
 def foto_saja(row):
     """True = baris tanpa gambar AI / video AI / video sendiri -> mode foto saja (gambar AI acak + foto Shopee)."""
     no = g(row, "no")
@@ -261,7 +277,7 @@ def foto_saja(row):
 def input_hash(row):
     keys = ["nama", "harga", "naskah", "img_ai", "vid_ai", "audio", "img_produk", "pendek",
             "vid_saya", "foto_lain", "durasi"]
-    return hashlib.md5(("|".join(g(row, k) for k in keys) + VOICE_ID + MODEL_KEY() + EDIT_VER + (MUSIK_VER if MUSIK_ON else "") + ("ai" + str(AI_SECS) if ai_on(g(row, "no")) else "") + ("loop" if g(row, "no") in LOOP_NOS else "") + ("pp" if g(row, "no") in PINGPONG_NOS else "") + ("nt" if g(row, "no") in TANPA_TEKS else "") + ("ar" if artis_on(g(row, "no")) else "") + (FOTO_VER + str(len(artis_pool())) if foto_saja(row) else "") + (BARU_VER + str(MUSIK_VOL_BARU) + str(SUARA_VOL_BARU) if baru(g(row, "no")) else "")).encode()).hexdigest()[:12]
+    return hashlib.md5(("|".join(g(row, k) for k in keys) + VOICE_ID + MODEL_KEY() + EDIT_VER + (MUSIK_VER if MUSIK_ON else "") + ("ai" + str(AI_SECS) if ai_on(g(row, "no")) else "") + ("loop" if g(row, "no") in LOOP_NOS else "") + ("pp" if g(row, "no") in PINGPONG_NOS else "") + ("nt" if g(row, "no") in TANPA_TEKS else "") + ("ar" if artis_on(g(row, "no")) else "") + (FOTO_VER + str(len(artis_pool())) if foto_saja(row) else "") + (BARU_VER + str(MUSIK_VOL_BARU) + str(SUARA_VOL_BARU) if baru(g(row, "no")) else "") + ("hk" + g(row, "hook") if g(row, "hook") else "") + ("ks" if naskah_ucap(row) != g(row, "naskah") else "")).encode()).hexdigest()[:12]
 
 # ---- Klip video AI (Alibaba Wan, bayar per detik; hanya untuk No yang ada di config.json "ai_klip") ----
 AI_NOS = {str(x) for x in CFG.get("ai_klip", [])}
@@ -481,7 +497,7 @@ def render(row):
           + f"drawtext=fontfile={FONT}:text='Kode {no} - Cek link di bio':fontsize=56:fontcolor=white:"
             f"box=1:boxcolor=0xEE4D2D@0.95:boxborderw=26:x=(w-tw)/2:y=h-330")
     ass = work / "sub.ass"
-    make_ass(ass, no, g(row, "naskah"), a_dur / tempo, total)
+    make_ass(ass, no, naskah_ucap(row), a_dur / tempo, total, g(row, "hook"))
     vf += f",subtitles='{ass.resolve()}':fontsdir={Path(FONT).parent}"
     if str(no) in TANPA_TEKS or (artis_v and not CFG.get("artis_teks", False)):
         vf = "tpad=stop_mode=clone:stop_duration=5"
@@ -513,7 +529,7 @@ HASIL_DATA = {}
 
 def voice_for(row):
     """Suara ElevenLabs per baris -> output/suara-<No>.mp4 (bisa didengar & tidak dibuat ulang)."""
-    no, text = g(row, "no"), g(row, "naskah")
+    no, text = g(row, "no"), naskah_ucap(row)
     if not text: raise RuntimeError("Naskah suara (kolom L) kosong.")
     h = hashlib.md5((VOICE_ID + MODEL_KEY() + text + (BARU_VER if baru(no) else "")).encode()).hexdigest()[:12]
     out = OUT / f"suara-{no}.mp4"
