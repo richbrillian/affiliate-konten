@@ -1,0 +1,29 @@
+{
+  "judul": "Affiliate Tumbler (contoh)",
+  "judul_layar": "Es teh cepet anget? Ini solusinya",
+  "suara": "id-ID-GadisNeural",
+  "musik": "ceria",
+  "produk_foto": "https://placehold.co/600x600/2aa198/ffffff.png?text=TUMBLER",
+  "tokoh": {
+    "Andi": {"jenis": "laki", "baju": "biru"},
+    "Mira": {"jenis": "perempuan", "baju": "merah muda", "rambut": "coklat"}
+  },
+  "adegan": [
+    {"teks": "Siang panas gini, es teh baru sejam udah anget. Kesel banget!",
+     "latar": "kota", "tata": "penuh",
+     "tokoh": [{"nama": "Andi", "aksi": "sedih", "posisi": "tengah", "bawa": "gelas"}]},
+    {"teks": "Kenalin, tumbler stainless anti panas. Dingin tahan dua belas jam!",
+     "latar": "kota", "tata": "atas_produk", "harga": "Rp49.000", "coret": "Rp99.000",
+     "tokoh": [{"nama": "Andi", "aksi": "kaget", "posisi": "kiri"}, {"nama": "Mira", "aksi": "memberi", "posisi": "kanan", "bawa": "produk"}]},
+    {"teks": "Mira udah pakai seminggu. Esnya tetap utuh sampai sore.",
+     "latar": "taman", "tata": "goyang",
+     "tokoh": [{"nama": "Andi", "aksi": "kaget", "posisi": "kiri"}, {"nama": "Mira", "aksi": "tertawa", "posisi": "kanan"}]},
+    {"teks": "Anti bocor, muat di tas, warnanya banyak. Harganya cuma empat puluh sembilan ribu!",
+     "latar": "taman", "tata": "goyang",
+     "chat": [{"dari": "kiri", "teks": "Anti bocor", "centang": false}, {"dari": "kiri", "teks": "Muat di tas", "centang": false}, {"dari": "kiri", "teks": "Cuma Rp49.000", "centang": false}],
+     "tokoh": [{"nama": "Andi", "aksi": "lompat", "posisi": "kiri"}, {"nama": "Mira", "aksi": "cinta", "posisi": "kanan"}]},
+    {"teks": "Klik keranjang kuning sekarang, mumpung lagi diskon. Kamu mau warna apa?",
+     "latar": "senja", "tata": "goyang", "efek": "panah",
+     "tokoh": [{"nama": "Andi", "aksi": "melambai", "posisi": "kiri"}, {"nama": "Mira", "aksi": "melambai", "posisi": "kanan"}]}
+  ]
+}
