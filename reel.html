@@ -31,7 +31,9 @@ button.sec{background:transparent;color:var(--fg);border:1px solid var(--line)}
 // Webhook Make untuk menulis tanda di kolom AO sheet. Kosong = hanya ditandai di browser ini.
 const HOOK = "https://hook.eu2.make.com/g8ihajxw0rb7hghyaaes2kuap2scnw9u";
 const FB = "https://www.facebook.com";
+const RAW = "https://raw.githubusercontent.com/richbrillian/affiliate-konten/main/output/";
 const LS = "reelDone";
+const QK = new URLSearchParams(location.search).get("kode");   // ?kode=N = langsung pilih produk N
 const $ = id => document.getElementById(id);
 const st = t => $("st").textContent = t;
 let done = []; try { done = JSON.parse(localStorage.getItem(LS) || "[]"); } catch (e) {}
@@ -117,10 +119,17 @@ window.addEventListener("message", e => {
 $("reset").onclick = () => { if (confirm("Hapus semua tanda lokal?")) { done = []; saveDone(); location.reload(); } };
 
 // Semua produk yang videonya sudah dirender (kolom T terisi) dan belum diposting ke profil (kolom AO kosong).
-// Kode terbaru (video model terbaru) tampil & dipilih duluan.
+// Kode terbaru (video model terbaru) tampil & dipilih duluan. ?kode=N memilih produk N langsung.
 fetch("produk.json?v=" + Date.now()).then(r => r.json()).then(d => {
-  items = d.filter(p => /^https?:\/\//.test(p.video || "") && !(p.reel || "").trim() && !done.includes(p.kode))
-           .sort((a, b) => b.kode - a.kode);
+  if (QK) {
+    const p = d.find(x => String(x.kode) === QK);
+    if (!p) { st("Kode " + QK + " tidak ada di produk.json."); return; }
+    p.video = p.video || (RAW + QK + ".mp4");
+    items = [p];
+  } else {
+    items = d.filter(p => /^https?:\/\//.test(p.video || "") && !(p.reel || "").trim() && !done.includes(p.kode))
+             .sort((a, b) => b.kode - a.kode);
+  }
   $("reset").style.display = done.length ? "block" : "none";
   if (!items.length) { st("Semua video yang sudah jadi sudah diposting ke profil. 🎉"); return; }
   pilih = items[0]; pilih.cap = caption(pilih); gambar();
