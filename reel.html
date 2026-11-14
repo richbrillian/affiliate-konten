@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Reel Ulang</title>
+<title>Reel Profil</title>
 <style>
 :root{--brand:#ee4d2d;--bg:#fff;--fg:#222;--mut:#777;--line:#e5e5e5}
 @media (prefers-color-scheme:dark){:root{--bg:#18191a;--fg:#e4e6eb;--mut:#a0a0a0;--line:#333}}
@@ -22,7 +22,7 @@ button.sec{background:transparent;color:var(--fg);border:1px solid var(--line)}
 </style>
 </head>
 <body>
-<h1>Reel ulang ke profil FB</h1>
+<h1>Reel ke profil FB</h1>
 <div id="st">Memuat daftar produk…</div>
 <div id="cap"></div>
 <div id="list"></div>
@@ -71,10 +71,10 @@ let items = [], pilih = null, timer = null, terkirim = false;
 function gambar() {
   $("list").innerHTML = items.map(p => `<div class="it${pilih && p.kode === pilih.kode ? " on" : ""}" data-k="${p.kode}">
     <span class="k">${p.kode}</span><img src="https://images.weserv.nl/?w=100&url=${encodeURIComponent(p.foto)}" alt="">
-    <div class="n">${p.nama}<div class="m">${rp(p.harga)}</div></div></div>`).join("");
+    <div class="n">${p.nama}<div class="m">${rp(p.harga)}${/^Terposting/i.test(p.status || "") ? " • sudah di Halaman" : " • baru"}</div></div></div>`).join("");
   document.querySelectorAll(".it").forEach(el => el.onclick = () => {
     if (terkirim) return;
-    clearTimeout(timer); pilih = items.find(p => p.kode == el.dataset.k); pilih.cap = caption(pilih);
+    clearTimeout(timer); clearInterval(timer); pilih = items.find(p => p.kode == el.dataset.k); pilih.cap = caption(pilih);
     gambar(); kirim();
   });
 }
@@ -113,11 +113,13 @@ window.addEventListener("message", e => {
 
 $("reset").onclick = () => { if (confirm("Hapus semua tanda lokal?")) { done = []; saveDone(); location.reload(); } };
 
+// Semua produk yang videonya sudah dirender (kolom T terisi) dan belum diposting ke profil (kolom AO kosong).
+// Kode terbaru (video model terbaru) tampil & dipilih duluan.
 fetch("produk.json?v=" + Date.now()).then(r => r.json()).then(d => {
-  items = d.filter(p => /^Terposting/i.test(p.status || "") && /^https?:\/\//.test(p.video || "") && !(p.reel || "").trim() && !done.includes(p.kode))
-           .sort((a, b) => a.kode - b.kode);
+  items = d.filter(p => /^https?:\/\//.test(p.video || "") && !(p.reel || "").trim() && !done.includes(p.kode))
+           .sort((a, b) => b.kode - a.kode);
   $("reset").style.display = done.length ? "block" : "none";
-  if (!items.length) { st("Semua produk yang sudah terposting di Halaman sudah dibuat Reel ulang. 🎉"); return; }
+  if (!items.length) { st("Semua video yang sudah jadi sudah diposting ke profil. 🎉"); return; }
   pilih = items[0]; pilih.cap = caption(pilih); gambar();
   let n = 3; st(`Kode ${pilih.kode} akan dikirim dalam ${n} detik… (klik produk lain untuk memilih)`);
   timer = setInterval(() => { n--; if (n > 0) st(`Kode ${pilih.kode} akan dikirim dalam ${n} detik… (klik produk lain untuk memilih)`); else { clearInterval(timer); if (!terkirim) kirim(); } }, 1000);
