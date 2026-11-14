@@ -4,7 +4,8 @@ Dipasang otomatis oleh render_facts.py (yang diimpor render.py) tanpa mengubah w
 Aktif untuk baris dengan No >= "remotion_dari" di config.json. Baris lain tetap memakai render lama.
 Susunan (baris DENGAN kolom Gambar AI): foto artis (artisDetik) -> 3 foto asli (artis kecil tanpa latar goyang di atasnya) -> foto artis lagi.
 Susunan (baris TANPA Gambar AI): 1 gambar AI ACAK dari folder artis/ selama artisDetik (foto produk kecil goyang di atas
-subtitle) -> sisa durasi diisi 3 foto produk dibagi rata (tanpa layar hitam). Durasi video = panjang suara + 0,6 dtk.
+subtitle) -> sisa durasi diisi 3 foto produk dibagi rata (tanpa layar hitam).
+Durasi video SELALU = panjang suara + 0,6 dtk (kolom "Durasi video" diabaikan) -> suara tidak dipercepat/terpotong.
 Folder artis/ kosong -> langsung 3 foto produk dibagi rata.
 Suara ElevenLabs & musik memakai bahan yang sama dengan render lama. Kalau Remotion gagal, pakai render lama
 dan baris dicoba lagi pada pengecekan berikutnya.
@@ -105,15 +106,8 @@ def remo_render(row):
     siapkan_alat()
     audio = M.fetch(g(row, "audio"), ".mp3") or M.voice_for(row)
     a_dur = M.duration(audio)
-    try:
-        total = float(g(row, "durasi").replace(",", "."))
-    except ValueError:
-        total = 0
-    if total <= 0:
-        total = a_dur + 0.6
     tanpa_ai = not g(row, "img_ai")
-    if tanpa_ai:
-        total = a_dur + 0.6          # tanpa gambar AI sendiri: durasi video ikut lama suara
+    total = a_dur + 0.6                  # durasi video selalu ikut panjang suara
     total = max(5.0, min(total, 90.0))
     tempo = min(1.25, a_dur / (total - 0.3)) if a_dur > total - 0.3 else 1.0
 
