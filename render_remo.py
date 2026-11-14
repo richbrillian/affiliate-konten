@@ -8,6 +8,7 @@ subtitle) -> sisa durasi diisi 3 foto produk dibagi rata (tanpa layar hitam). Du
 Folder artis/ kosong -> langsung 3 foto produk dibagi rata.
 Suara ElevenLabs & musik memakai bahan yang sama dengan render lama. Kalau Remotion gagal, pakai render lama
 dan baris dicoba lagi pada pengecekan berikutnya.
+Suara dinormalkan (loudnorm -14 LUFS) supaya jelas terdengar; musik latar dipelankan (setara volume 0,06 render lama).
 """
 import hashlib, json, os, random, re, shutil, subprocess, sys
 from pathlib import Path
@@ -16,6 +17,8 @@ M = sys.modules["__main__"]          # render.py yang sedang berjalan
 ROOT = Path(__file__).parent
 REMO = ROOT / "remo"
 REMO_VER = "r4"
+SUARA_AF = "loudnorm=I=-14:TP=-1.5:LRA=11,"   # suara lebih keras & rata (tidak pelan)
+MUSIK_AF = "volume=0.46"                      # musik di Iklan.tsx 0.13 x 0.46 = ±0.06
 _asli_render, _asli_hash = M.render, M.input_hash
 
 
@@ -119,13 +122,13 @@ def remo_render(row):
     pub.mkdir(parents=True)
     pilih = None
     try:
-        # suara (dipercepat bila perlu, dipotong sesuai durasi) & musik
-        af = (f"atempo={tempo:.3f}," if tempo > 1.0 else "") + "apad"
+        # suara (dinormalkan, dipercepat bila perlu, dipotong sesuai durasi) & musik (dipelankan)
+        af = SUARA_AF + (f"atempo={tempo:.3f}," if tempo > 1.0 else "") + "apad"
         sh(["ffmpeg", "-y", "-loglevel", "error", "-i", str(audio), "-af", af, "-t", f"{total:.2f}",
-            "-c:a", "libmp3lame", "-b:a", "128k", str(pub / "suara.mp3")])
+            "-ar", "44100", "-c:a", "libmp3lame", "-b:a", "128k", str(pub / "suara.mp3")])
         musik = ""
         if M.MUSIK_ON:
-            sh(["ffmpeg", "-y", "-loglevel", "error", "-i", str(M.make_music()), "-c:a", "libmp3lame",
+            sh(["ffmpeg", "-y", "-loglevel", "error", "-i", str(M.make_music()), "-af", MUSIK_AF, "-c:a", "libmp3lame",
                 "-b:a", "96k", str(pub / "musik.mp3")])
             musik = f"p{no}/musik.mp3"
         # foto
