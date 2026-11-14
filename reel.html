@@ -41,7 +41,10 @@ const sh = a => a.map(v => [Math.random(), v]).sort((x, y) => x[0] - y[0]).map(v
 const rp = n => "Rp" + Number(n).toLocaleString("id-ID");
 
 function caption(p) {
-  const info = (p.info || "").replace(/\([^)]*\)/g, "").replace(/Ada program sampel gratis\.?/gi, "").replace(/\s+/g, " ").replace(/\s+([,.;])/g, "$1").trim();
+  // Info dari sheet: buang catatan internal (komisi, angka terjual/rating) supaya tidak tampil di caption publik.
+  const info = (p.info || "").replace(/\([^)]*\)/g, "").replace(/Ada program sampel gratis\.?/gi, "")
+    .split(/(?<=[.!?])\s+/).filter(k => !/komisi|terjual|rating/i.test(k)).join(" ")
+    .replace(/\s+/g, " ").replace(/\s+([,.;])/g, "$1").trim();
   const laku = (p.terjual || "").toLowerCase();
   const pembuka = [
     `Yang lagi cari ${p.nama}, ini dia 👇`,
