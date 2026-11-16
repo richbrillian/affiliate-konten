@@ -9,7 +9,8 @@ Durasi video SELALU = panjang suara + 0,6 dtk (kolom "Durasi video" diabaikan) -
 Folder artis/ kosong -> langsung 3 foto produk dibagi rata.
 Suara ElevenLabs & musik memakai bahan yang sama dengan render lama. Kalau Remotion gagal, pakai render lama
 dan baris dicoba lagi pada pengecekan berikutnya.
-Suara dinormalkan (loudnorm -14 LUFS) supaya jelas terdengar; musik latar dipelankan (setara volume 0,06 render lama).
+Suara dinormalkan (loudnorm -14 LUFS) supaya jelas terdengar; musik latar pelan tapi terdengar
+(config.json "musik_remo_vol", default 0.9 -> setara volume ±0,12 render lama; dulu 0.46 terlalu pelan).
 """
 import hashlib, json, os, random, re, shutil, subprocess, sys
 from pathlib import Path
@@ -19,7 +20,7 @@ ROOT = Path(__file__).parent
 REMO = ROOT / "remo"
 REMO_VER = "r4"
 SUARA_AF = "loudnorm=I=-14:TP=-1.5:LRA=11,"   # suara lebih keras & rata (tidak pelan)
-MUSIK_AF = "volume=0.46"                      # musik di Iklan.tsx 0.13 x 0.46 = ±0.06
+MUSIK_AF = "volume=" + str(M.CFG.get("musik_remo_vol", 0.9))   # musik di Iklan.tsx 0.13 x 0.9 = ±0.12 (pelan, tetap terdengar)
 _asli_render, _asli_hash = M.render, M.input_hash
 
 
