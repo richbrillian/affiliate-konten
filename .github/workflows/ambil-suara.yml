@@ -1,0 +1,27 @@
+name: Ambil suara render ulang
+on:
+  push:
+    paths: ['.github/workflows/ambil-suara.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  ambil:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          cd suara-render-ulang
+          while read -r no id; do
+            [ -z "$no" ] && continue
+            [ -s "$no.mp3" ] && continue
+            curl -fsSL -H "xi-api-key: $KEY" -o "$no.mp3" \
+              "https://api.elevenlabs.io/v1/history/$id/audio" \
+              && echo "OK $no" || { echo "GAGAL $no"; rm -f "$no.mp3"; }
+          done < history.txt
+        env:
+          KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+      - run: |
+          git config user.name "bot"; git config user.email "bot@users.noreply.github.com"
+          git add suara-render-ulang/*.mp3
+          git diff --cached --quiet || (git commit -m "Suara render ulang" && git push)
