@@ -51,7 +51,8 @@ function simpanStatus(){try{localStorage.setItem(KEY,JSON.stringify(sudah))}catc
 let data=[],tab='belum';
 const toast=t=>{const el=document.getElementById('toast');el.textContent=t;el.style.display='block';clearTimeout(el._t);el._t=setTimeout(()=>el.style.display='none',2200)};
 function caption(p){
-  let c=(p.capfb||p.nama||'').split('\n').filter(l=>!/link affiliate|s\.shopee\.co\.id|link di bio/i.test(l)).join('\n').trim();
+  let c=(p.capfb||'').replace(/Cek (di sini|link di bio)[^\n]*/gi,'').replace(/\(link affiliate\):?/gi,'').replace(/https?:\/\/\S+/g,'').replace(/[ \t:]+$/gm,'').replace(/\n{3,}/g,'\n\n').trim();
+  if(c.length<25)c=p.nama+(p.terjual?', terjual '+p.terjual+' di Shopee!':'');
   return c+(p.tag?'\n\n'+p.tag:'');
 }
 async function ambilVideo(p){
